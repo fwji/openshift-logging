@@ -98,3 +98,15 @@ daytrader-1-5nn6b   1/1       Running   0          3h
 
 ## Setup Kibana Dashboard
 
+1. Visit kibana dashboard page using the URL configured in inventory file (e.g.https://kibana.192.168.122.1.nip.io)
+
+2. Login as username:admin; password:admin
+
+3. Click **Management** on the left pane
+
+4. Click **Index Pattern**
+
+5. Click **Create Index Pattern**
+
+6. Choose **project.*** as the Index Pattern and **@timestamp** as Timefield name
+
