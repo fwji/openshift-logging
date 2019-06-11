@@ -1,0 +1,53 @@
+[OSEv3:children]
+masters
+nodes
+etcd
+
+[OSEv3:vars]
+ansible_become=true
+ansible_ssh_user=root
+ansible_ssh_private_key_file=/root/.ssh/id_rsa
+ansible_user=root
+containerized=true
+openshift_is_containerized=True
+deployment_type=origin
+openshift_image_tag=v3.11
+openshift_release=v3.11
+openshift_pkg_version=-3.11.0
+openshift_node_groups=[{'name': 'logging', 'labels': ['node-role.kubernetes.io/master=true','node-role.kubernetes.io/infra=true'] }]
+
+openshift_web_console_install=False
+#openshift_logging_es_pvc_size=100G
+
+openshift_deployment_type=origin
+openshift_disable_check=disk_availability,memory_availability,docker_storage
+
+openshift_protect_installed_version=true
+docker_protect_installed_version=true
+
+openshift_logging_master_public_url=https://192.168.122.1.nip.io:8443
+openshift_logging_image_prefix=openshift/origin-
+openshift_logging_image_version=v3.11
+openshift_logging_elasticsearch_proxy_image_prefix=openshift/origin-
+openshift_logging_elasticsearch_proxy_image_version=latest
+openshift_logging_es_log_appenders=['console']
+openshift_logging_elasticsearch_memory_limit=6G
+openshift_logging_kibana_hostname=kibana.192.168.122.1.nip.io
+
+openshift_logging_es_nodeselector={"region":"infra"}
+#openshift_logging_use_ops=true
+openshift_logging_es_ops_cpu_request=400m
+openshift_logging_es_ops_memory_limit=500M
+openshift_logging_kibana_ops_hostname=kibana-ops.192.168.122.1.nip.io
+
+[masters]
+localhost openshift_node_group_name=logging
+
+[masters:vars]
+localhost openshift_node_group_name=logging openshift_schedulable=true openshift_node_labels="{'region': 'infra','zone': 'default'}"
+
+[nodes]
+localhost openshift_node_group_name=logging
+
+[etcd]
+localhost openshift_node_group_name=logging
