@@ -102,11 +102,21 @@ daytrader-1-5nn6b   1/1       Running   0          3h
 
 2. Login as username:admin; password:admin
 
-3. Click **Management** on the left pane
+3. Click on the **Management** on the left pane
 
-4. Click **Index Pattern**
+4. Click on the **Index Pattern**
 
-5. Click **Create Index Pattern**
+5. Click on the **Create Index Pattern**
 
-6. Choose **project.*** as the Index Pattern and **@timestamp** as Timefield name
+6. Type in **project.*** as the Index Pattern and select **@timestamp** as Timefield name
+
+7. Click on the **Create** button
+
+8. Navigate back to the **Management** page and Click on **Saved Objects**
+
+9. Click on the **Import** button and select **beta_dashboard.json**
+
+10. When prompt, click **Yes, overwrite all** option
+
+11. Click on the **Dashboard** and select the dashboard just imported
 
