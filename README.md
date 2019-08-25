@@ -1,118 +1,75 @@
 # openshift-logging
 
-## Prerequisites
+Openshift provides a preconfigured EFK(Elasticsearch, FluentD, and Kibana) stack for DevOps to aggregate all container logs. The installation of this EFK stack can be done using the ansible-playbooks included in the [openshift-ansible](https://github.com/openshift/openshift-ansible/tree/release-3.11) repository. Once the installation is completed, the EFK deployments can be found inside the *openshift-logging* namespace of the Openshift cluster.
 
-1. REHL or CentOS
-2. Docker installed
-3. oc 3.11 binary installed https://www.okd.io
-4. root user access
-5. Python installed
-6. Ansible installed
+Our recommended setup for EFK is to have two separated EFK setup. An ops EFK deployments dedicated just for Openshift and Kubernetes logs, and another EFK stack just for user applications. There are several advantages of having an ops EFK stack. For one, it'll be much easier to find applications logs in Kibana, as it won't be polluted with all the cluster logs. It also provides more flexibility for memory allocations since users can assign system memories for each of the EFK deployments independently. 
 
-## Install Openshift_Logging
+# Step 1: Install Openshift and Openshift-logging
 
-1. make a new directory called workspace
-```console
-root@bar:~$ mkdir workspace
+
+## Installing openshift-logging 
+
+The installation of EFK on Openshift is fairly straight forward, as all it requires is an Openshift host inventory file and the openshift-ansible playbook for logging installation. After creating the inventory file, add the following ansible variables to the **[OSEv3:vars]** section of the inventory file. 
+```
+openshift_logging_use_ops=True
+openshift_logging_es_ops_nodeselector={“node-role.kubernetes.io/infra”:“true”}
+openshift_logging_es_nodeselector={"node-role.kubernetes.io/infra":"true"}
+openshift_logging_es_ops_memory_limit=5G
+openshift_logging_es_memory_limit=3G
 ```
 
-2. go to the workspace dircetory
-```console
-root@bar:~$ cd workspace
+For the sake of simplicity, this guide will just set these five ansible variables. There are many other ansible variables provided by Openshift for fine-tuning the EFK stack on your system. The detailed information about the installation and configuration can be found on Openshift documentation [Aggregating Container Logs](https://docs.openshift.com/container-platform/3.11/install_config/aggregate_logging.html). 
+
+Let's examine each of the variables in detail. Setting **openshift_logging_use_ops=True** instructs the ansible to install two EFKs with a dedicated ops deployment. **openshift_logging_es_nodeselector** and **openshift_logging_es_ops_nodeselector** are two required variables by the ansible-playbook to install Elasticsearch, and people usually just set them to the infra nodes. Lastly, **openshift_logging_es_memory_limit** and **openshift_logging_es_ops_memory_limit** are self-explanatory and can be set according to one's own need. For stable operation, users should allocate at least 2GB of memory for each of the Elasticsearch deployments. If not specified explicitly, Openshift would allocate 16GB of memory for each of the Elasticsearch deployment by default. It is highly recommended to install openshift-logging on systems with at least 32GB of RAM when **openshift_logging_use_ops** is set to true.
+
+After all the variables are set in the inventory file, the user would just need to execute the ansible-playbook command to install the EFK stack onto its current Openshift Cluster.
+
+```
+[root@rhel-2EFK ~]# ansible-playbook -i <inventory_file> openshift-ansible/playbooks/openshift-logging/config.yml -e openshift_logging_install_logging=true
 ```
 
-3. create a new oc cluster
-```console
-root@bar:~/workspace$ oc cluster up --public-hostname=192.168.122.45.nip.io
+The installation process might take a few minutes to complete. Once the installation is completed without any error, you should be able to see the following pods running in the *openshift-logging* namespace.
+
+```
+[root@rhel-2EFK ~]# oc get pods -n openshift-logging
+NAME                                          READY     STATUS      RESTARTS   AGE
+logging-curator-1565163000-9fvpf              0/1       Completed   0          20h
+logging-curator-ops-1565163000-5l5tx          0/1       Completed   0          20h
+logging-es-data-master-iay9qoim-4-cbtjg       2/2       Running     0          3d
+logging-es-ops-data-master-hsmsi5l8-3-vlrgs   2/2       Running     0          3d
+logging-fluentd-vssj2                         1/1       Running     1          3d
+logging-kibana-2-tplkv                        2/2       Running     6          4d
+logging-kibana-ops-1-bgl8k                    2/2       Running     2          3d
 ```
 
-4. verify a folder named 'openshift.local.clusterup' is created
-```console
-root@bar:~/workspace$ ls
-openshift.local.clusterup
+You should see that elasticsearch, kibana, and curator all have two types of pods: the main one and a secondary set of pods with *-ops* postfix, except for fluentd. This is expected as the split of application logs, and the Openshift operations logs are happening inside that single fluentd instance. All the node system logs and the logs from projects **default**, **openshift**, and **openshift-infra** are considered as operation logs and are aggregated to the ops Elasticsearch server. The logs from any other namespaces are aggregated to the main Elasticsearch server.
+
+The openshift-logging ansible-playbook will also expose two routes for external access of the Kibana and ops Kibana web console.
+
+```
+[root@rhel-2EFK ~]# oc get routes -n openshift-logging
+NAME                 HOST/PORT                             PATH      SERVICES             PORT      TERMINATION          WILDCARD
+logging-kibana       kibana.apps.9.37.135.153.nip.io                 logging-kibana       <all>     reencrypt/Redirect   None
+logging-kibana-ops   kibana-ops.apps.9.37.135.153.nip.io             logging-kibana-ops   <all>     reencrypt/Redirect   None
 ```
 
-5. git clone openshift-ansible
-```console
-root@bar:~/workspace$ git clone git@github.com:openshift/openshift-ansible.git
-```
+If you head to the **logging-kibana-ops** url, all the operation logs generated by Openshift and Kubernetes should be visible on Kibana's **Discover** page.   
 
-6. Checkout 3.11 release
-```console
-root@bar:~/workspace$ cd openshift-ansible
-root@bar:~/workspace/openshift-ansible$ git checkout release-3.11
-```
+# Step 2: View application logs on Kibana
 
-7. download the install-logging inventory file to the openshift-ansible directory, update the ip address to your environment
+Before using the **logging-kibana** for application logs, make sure the application is already deployed in a namespace that is not one of the **default**, **openshift**, and **openshift-infra**. 
 
-8. Establish a link to the admin.kubeconfig that openshift-ansible expects
-```console
-root@bar:~/workspace/openshift-ansible$ ln -s /root/workspace/openshift.local.clusterup/kube-apiserver/admin.kubeconfig /etc/origin/master/admin.kubeconfig
-```
+In order to fully take advantage of the Kibana's dashboard functionalities, it is recommended to output application in JSON format. Kibana is then able to process the data from each individual fields of the JSON object to create some nice customized visualization for each field of interest. 
 
-9. Run ansible playbook to install EFK stack on openshift, this will take a few minutes to complete
-```console
-root@bar:~/workspace/openshift-ansible$ ansible-playbook -i install-logging.inventory playbooks/openshift-logging/config.yml -e openshift_logging_install_logging=true
-```
+Visit Kibana dashboard page using the routes URL configured in inventory file (e.g.https://kibana.apps.9.37.135.153.nip.io). Login in using your Openshift user and password, then the page should redirect you to **Discover** page where the newest logs of the selected index are being streamed. Select **project.\*** index to view the application logs generated by the deployed application. 
 
-10. Verify Installation
-```console
-root@bar:~/workspace/openshift-ansible$ ln -s /root/workspace/openshift.local.clusterup/kube-apiserver/admin.kubeconfig /etc/origin/master/admin.kubeconfig
-oc get pods -n openshift-logging
-NAME READY STATUS RESTARTS AGE
-logging-curator-1-x5jbw 1/1 Running 0 1m
-logging-es-data-master-cuyorw4k-1-8hjnf 2/2 Running 0 1m
-logging-fluentd-5xwbl 1/1 Running 0 1m
-logging-kibana-1-4cmgq 2/2 Running 0 2m
-```
+The **project.\*** index only contains a set of default fields at the start, which will certainly not include all the fields from the deployed application's JSON log object. Therefore the index needs to be refreshed to have all the fields from the application's log object available to Kibana.  
 
-## Deploy application to openshift
+To refresh the index, click on the **Management** option on the left pane.
 
-1. Create an admin user
-```console
-root@bar:~/workspace/openshift-ansible$ oc login -u system:admin
-root@bar:~/workspace/openshift-ansible$ oc adm policy add-cluster-role-to-user cluster-admin admin
-```
+Click on the **Index Pattern**, find **project.\*** in Index Pattern and click on the refresh fields button on the right. Once the Kibana is updated with all the available fields in the **project.\*** index, it's time to import the preconfigured dashboards to view the application logs in some really nice visualization. 
 
-2. Create a new project
-```console
-root@bar:~/workspace/openshift-ansible$ oc new-project myproject --description="My first project" --display-name="My Project"
-```
+To import dashboard and its associated search and visualization objects, navigate back to the **Management** page and Click on **Saved Objects**. Click on the **Import** button and select the dashboard file. When prompt, click **Yes, overwrite all** option
 
-3. Switch to myproject
-```console
-root@bar:~/workspace/openshift-ansible$ oc project myproject
-```
-
-4. Download the docker image from docker hub
-```console
-root@bar:~/workspace/openshift-ansible$ oc new-app "frankji/daytrader" --name daytrader
-```
-
-5. Verify the pod is up and running
-```console
-root@bar:~/workspace/openshift-ansible$ oc get pods
-NAME                READY     STATUS    RESTARTS   AGE
-daytrader-1-5nn6b   1/1       Running   0          3h
-```
-
-## Setup Kibana Dashboard
-
-1. Visit kibana dashboard page using the URL configured in inventory file (e.g.https://kibana.192.168.122.1.nip.io)
-
-2. Login as username:admin; password:admin
-
-3. Click on the **Management** on the left pane
-
-4. Click on the **Index Pattern**
-
-5. Find in **project.*** in Index Pattern click on the refresh fields button on the right
-
-6. Navigate back to the **Management** page and Click on **Saved Objects**
-
-7. Click on the **Import** button and select **beta_dashboard.json**
-
-8. When prompt, click **Yes, overwrite all** option
-
-9. Click on the **Dashboard** and select the dashboard just imported
+Head back to the **Dashboard** page and enjoy the logging on the dashboard imported previously. 
 
