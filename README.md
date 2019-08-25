@@ -83,3 +83,7 @@ To import dashboard and its associated search and visualization objects, navigat
 Head back to the **Dashboard** page and enjoy the logging on the dashboard imported previously. 
 ![Dashboard page](https://github.com/fwji/openshift-logging/blob/master/images/dashboard_1.png?raw=true "Dashboard page")
 *Figure 4: Kibana dashboard for Open Liberty application logs*
+
+## Reinstalling and uninstalling openshift-logging 
+
+It's always safe to reinstall openshift-logging by re-running the ansible-playbook installation command with updated ansible variables values in the inventory file if changes need to be made for the installed EFK stack. Similarly, if the aggregated containers logging is no longer needed in the current cluster, the same ansible-playbook command can also be used to uninstall the openshift-logging feature by having **openshift_logging_install_logging** set to False.
